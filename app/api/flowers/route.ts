@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { unstable_noStore as noStore } from 'next/cache';
 import { sql } from '@/lib/db';
 import { FlowerRaw, PhotoRaw } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET(request: NextRequest) {
+  noStore(); // Opt out of Next.js data cache entirely
   try {
     const { searchParams } = new URL(request.url);
     const q = searchParams.get('q');

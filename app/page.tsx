@@ -32,7 +32,10 @@ export default function Home() {
     if (sourceCulture) params.set('source_culture', sourceCulture);
     if (birthMonth) params.set('birth_month', birthMonth);
 
-    const res = await fetch(`/api/flowers?${params.toString()}`);
+    const res = await fetch(`/api/flowers?${params.toString()}&_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache' },
+    });
     const data = await res.json();
     setFlowers(data.flowers || []);
     setLoading(false);
@@ -55,7 +58,7 @@ export default function Home() {
 
   useEffect(() => {
     // Find today's birthday flower
-    fetch(`/api/flowers?birth_month=${todayMonth}`)
+    fetch(`/api/flowers?birth_month=${todayMonth}&_t=${Date.now()}`, { cache: 'no-store' })
       .then((r) => r.json())
       .then((data) => {
         const f = (data.flowers || []).find(
