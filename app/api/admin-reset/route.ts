@@ -10,9 +10,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await sql('DELETE FROM wishlist', []);
-    await sql('DELETE FROM photos', []);
-    await sql('DELETE FROM flowers', []);
+    await sql('TRUNCATE TABLE wishlist, photos, flowers RESTART IDENTITY CASCADE', []);
 
     const flowers = await sql('SELECT COUNT(*) as count FROM flowers', []);
     const photos = await sql('SELECT COUNT(*) as count FROM photos', []);
