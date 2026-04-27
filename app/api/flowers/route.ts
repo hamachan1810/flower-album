@@ -76,7 +76,9 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ flowers: result });
+    const dbUrl = process.env.DATABASE_URL || '';
+    const hostMatch = dbUrl.match(/@([^/]+)\//);
+    return NextResponse.json({ flowers: result, db_host: hostMatch ? hostMatch[1] : 'unknown' });
   } catch (error) {
     console.error('GET flowers error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
