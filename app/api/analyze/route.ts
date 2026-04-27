@@ -119,10 +119,13 @@ export async function POST(request: NextRequest) {
         }
       } catch (err) {
         console.error('Anthropic API error:', err);
+        const errMsg = err instanceof Error ? err.message : String(err);
+        results.push({ error: `Anthropic error: ${errMsg}`, file_path: publicPath });
+        continue;
       }
 
       if (!analysisResult) {
-        results.push({ error: 'Failed to analyze image', file_path: publicPath });
+        results.push({ error: 'Failed to parse analysis result', file_path: publicPath });
         continue;
       }
 
