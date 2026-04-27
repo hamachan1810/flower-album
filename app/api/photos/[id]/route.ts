@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { PhotoRaw } from '@/lib/types';
+import { del } from '@vercel/blob';
 
 export async function PATCH(
   request: NextRequest,
@@ -55,6 +56,37 @@ export async function PATCH(
     });
   } catch (error) {
     console.error('PATCH photo error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const id = parseInt(params.id);
+
+    const photos = await sql('SELECT * FROM photos WHERE id = $1', [id]) as unknown as PhotoRaw[];
+    const photo = photos[0];
+    if (!photo) {
+      return NextResponse.json({ error: 'Photo not found' }, { status: 404 });
+    }
+
+    // Delete from Vercel Blob if it's our upload
+    if (photo.file_path && photo.file_path.includes('blob.vercel-storage.com')) {
+      try {
+        await del(photo.file_path, { token: process.env.BLOB_READ_WRITE_TOKEN });
+      } catch {
+        // Blob削除失敗は無視してDB削除を続行
+      }
+    }
+
+    await sql('DELETE FROM photos WHERE id = $1', [id]);
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('DELETE photo error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
