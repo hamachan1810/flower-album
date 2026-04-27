@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { FlowerRaw, PhotoRaw } from '@/lib/types';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: { id: string } }
@@ -31,7 +33,7 @@ export async function GET(
           user_emotion_tags: JSON.parse(p.user_emotion_tags || '[]'),
         })),
       },
-    });
+    }, { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } });
   } catch (error) {
     console.error('GET flower error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

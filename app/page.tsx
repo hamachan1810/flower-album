@@ -42,6 +42,17 @@ export default function Home() {
     fetchFlowers();
   }, [fetchFlowers]);
 
+  // Re-fetch when the user returns to this tab/page (e.g. after editing on detail page)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchFlowers();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [fetchFlowers]);
+
   useEffect(() => {
     // Find today's birthday flower
     fetch(`/api/flowers?birth_month=${todayMonth}`)

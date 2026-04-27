@@ -76,7 +76,9 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ flowers: result });
+    return NextResponse.json({ flowers: result }, {
+      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
+    });
   } catch (error) {
     console.error('GET flowers error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

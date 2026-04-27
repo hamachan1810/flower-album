@@ -202,7 +202,7 @@ export default function FlowerDetailPage() {
   };
 
   if (loading) return <div className="flex items-center justify-center min-h-screen"><div className="animate-spin text-4xl">🌸</div></div>;
-  if (!flower) return <div className="flex flex-col items-center justify-center min-h-screen gap-4"><p className="text-gray-500">花が見つかりません</p><button onClick={() => router.back()} className="text-green-600">戻る</button></div>;
+  if (!flower) return <div className="flex flex-col items-center justify-center min-h-screen gap-4"><p className="text-gray-500">花が見つかりません</p><button onClick={() => router.push('/')} className="text-green-600">戻る</button></div>;
 
   const swiperPhotos = buildSwiperPhotos();
 
@@ -210,7 +210,7 @@ export default function FlowerDetailPage() {
     <div className="pb-6">
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
-        <button onClick={() => router.back()} className="text-green-600 text-sm flex items-center gap-1">← 戻る</button>
+        <button onClick={() => router.push('/')} className="text-green-600 text-sm flex items-center gap-1">← 戻る</button>
         <button
           onClick={openFlowerEdit}
           className="text-sm text-gray-500 border border-gray-200 px-3 py-1 rounded-lg"
