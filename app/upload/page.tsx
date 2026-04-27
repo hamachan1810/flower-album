@@ -18,6 +18,7 @@ export default function UploadPage() {
   const [uploading, setUploading] = useState(false);
   const [results, setResults] = useState<AnalyzeResult[]>([]);
   const [progress, setProgress] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -35,20 +36,29 @@ export default function UploadPage() {
     setProgress(0);
     setResults([]);
 
+    const allResults: AnalyzeResult[] = [];
+
     try {
-      const formData = new FormData();
-      selectedFiles.forEach((f) => formData.append('images', f));
+      for (let i = 0; i < selectedFiles.length; i++) {
+        setCurrentIndex(i + 1);
+        setProgress(Math.round((i / selectedFiles.length) * 90));
 
-      setProgress(30);
-      const res = await fetch('/api/analyze', {
-        method: 'POST',
-        body: formData,
-      });
-      setProgress(90);
+        const formData = new FormData();
+        formData.append('images', selectedFiles[i]);
 
-      const data = await res.json();
-      if (data.results) {
-        setResults(data.results);
+        const res = await fetch('/api/analyze', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data = await res.json();
+        if (data.results) {
+          allResults.push(...data.results);
+          setResults([...allResults]);
+        } else if (data.error) {
+          allResults.push({ flower: null as unknown as import('@/lib/types').Flower, photo: null as unknown as import('@/lib/types').Photo, error: data.error });
+          setResults([...allResults]);
+        }
       }
       setProgress(100);
     } catch (err) {
@@ -128,7 +138,7 @@ export default function UploadPage() {
                 {uploading ? (
                   <span className="flex items-center justify-center gap-2">
                     <span className="animate-spin">🌸</span>
-                    AI分析中...
+                    AI分析中... ({currentIndex}/{selectedFiles.length})
                   </span>
                 ) : (
                   `${selectedFiles.length}枚をアップロード`
