@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { sql } from '@/lib/db';
 import { FlowerRaw, PhotoRaw } from '@/lib/types';
 import { put } from '@vercel/blob';
+import sharp from 'sharp';
 
 export const maxDuration = 60;
 
@@ -64,15 +65,35 @@ export async function POST(request: NextRequest) {
 
     for (const file of files) {
       const bytes = await file.arrayBuffer();
-      const buffer = Buffer.from(bytes);
+      let buffer = Buffer.from(bytes);
+      const originalType = file.type.toLowerCase();
+      const originalExt = (file.name.split('.').pop() || 'jpg').toLowerCase();
+
+      // Convert HEIC/HEIF to JPEG
+      const isHeic =
+        originalType === 'image/heic' ||
+        originalType === 'image/heif' ||
+        originalExt === 'heic' ||
+        originalExt === 'heif';
+
+      let mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' = 'image/jpeg';
+      let uploadExt = originalExt;
+
+      if (isHeic) {
+        const converted = await sharp(buffer).jpeg({ quality: 90 }).toBuffer();
+        buffer = Buffer.from(converted) as Buffer<ArrayBuffer>;
+        mediaType = 'image/jpeg';
+        uploadExt = 'jpg';
+      } else {
+        mediaType = (originalType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp') || 'image/jpeg';
+      }
+
       const base64 = buffer.toString('base64');
-      const mediaType = (file.type as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp') || 'image/jpeg';
 
       // Upload to Vercel Blob
       const timestamp = Date.now();
       const random = Math.random().toString(36).substring(2, 8);
-      const ext = file.name.split('.').pop() || 'jpg';
-      const filename = `uploads/${timestamp}-${random}.${ext}`;
+      const filename = `uploads/${timestamp}-${random}.${uploadExt}`;
 
       let publicPath = '';
       try {
