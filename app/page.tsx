@@ -80,7 +80,7 @@ export default function Home() {
               placeholder="花の名前を検索..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="flex-1 bg-gray-100 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-green-300"
+              className="flex-1 bg-gray-100 text-gray-900 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-green-300"
             />
             <button
               onClick={() => setShowFilters(!showFilters)}

@@ -53,24 +53,28 @@ export async function GET(request: NextRequest) {
 
     const flowers = await sql(query, params) as unknown as FlowerRaw[];
 
-    const result = await Promise.all(
-      flowers.map(async (f) => {
-        const photos = await sql(
-          'SELECT * FROM photos WHERE flower_id = $1 ORDER BY uploaded_at DESC',
-          [f.id]
-        ) as unknown as PhotoRaw[];
-        return {
-          ...f,
-          language: JSON.parse(f.language || '[]'),
-          primary_emotions: JSON.parse(f.primary_emotions || '[]'),
-          scene_tags: JSON.parse(f.scene_tags || '[]'),
-          photos: photos.map((p) => ({
-            ...p,
-            user_emotion_tags: JSON.parse(p.user_emotion_tags || '[]'),
-          })),
-        };
-      })
-    );
+    const result = [];
+    for (const f of flowers) {
+      const photos = await sql(
+        'SELECT * FROM photos WHERE flower_id = $1 ORDER BY uploaded_at DESC',
+        [f.id]
+      ) as unknown as PhotoRaw[];
+
+      const language = Array.isArray(f.language) ? f.language : JSON.parse(f.language || '[]');
+      const primary_emotions = Array.isArray(f.primary_emotions) ? f.primary_emotions : JSON.parse(f.primary_emotions || '[]');
+      const scene_tags = Array.isArray(f.scene_tags) ? f.scene_tags : JSON.parse(f.scene_tags || '[]');
+
+      result.push({
+        ...f,
+        language,
+        primary_emotions,
+        scene_tags,
+        photos: photos.map((p) => ({
+          ...p,
+          user_emotion_tags: Array.isArray(p.user_emotion_tags) ? p.user_emotion_tags : JSON.parse(p.user_emotion_tags || '[]'),
+        })),
+      });
+    }
 
     return NextResponse.json({ flowers: result });
   } catch (error) {

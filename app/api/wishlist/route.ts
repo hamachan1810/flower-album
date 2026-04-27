@@ -18,43 +18,42 @@ export async function GET() {
       ORDER BY w.added_at DESC
     `) as unknown as (FlowerRaw & { flower_id: number; added_at: string; is_captured: number; flower_created_at: string })[];
 
-    const result = await Promise.all(
-      wishlist.map(async (item) => {
-        const photos = await sql(
-          'SELECT * FROM photos WHERE flower_id = $1 ORDER BY uploaded_at DESC',
-          [item.flower_id]
-        ) as unknown as PhotoRaw[];
-        return {
-          id: (item as unknown as { id: number }).id,
-          flower_id: item.flower_id,
-          added_at: item.added_at,
-          is_captured: item.is_captured,
-          flower: {
-            id: item.flower_id,
-            name: item.name,
-            name_scientific: item.name_scientific,
-            language: JSON.parse(item.language || '[]'),
-            primary_emotions: JSON.parse(item.primary_emotions || '[]'),
-            scene_tags: JSON.parse(item.scene_tags || '[]'),
-            season: item.season,
-            birth_month: item.birth_month,
-            birth_day: item.birth_day,
-            habitat_description: item.habitat_description,
-            source_culture: item.source_culture,
-            sentiment: item.sentiment,
-            compound_emotion: item.compound_emotion,
-            emotion_intensity: item.emotion_intensity,
-            origin: item.origin,
-            source_culture_notes: item.source_culture_notes,
-            created_at: item.flower_created_at || '',
-            photos: photos.map((p) => ({
-              ...p,
-              user_emotion_tags: JSON.parse(p.user_emotion_tags || '[]'),
-            })),
-          },
-        };
-      })
-    );
+    const result = [];
+    for (const item of wishlist) {
+      const photos = await sql(
+        'SELECT * FROM photos WHERE flower_id = $1 ORDER BY uploaded_at DESC',
+        [item.flower_id]
+      ) as unknown as PhotoRaw[];
+      result.push({
+        id: (item as unknown as { id: number }).id,
+        flower_id: item.flower_id,
+        added_at: item.added_at,
+        is_captured: item.is_captured,
+        flower: {
+          id: item.flower_id,
+          name: item.name,
+          name_scientific: item.name_scientific,
+          language: Array.isArray(item.language) ? item.language : JSON.parse(item.language || '[]'),
+          primary_emotions: Array.isArray(item.primary_emotions) ? item.primary_emotions : JSON.parse(item.primary_emotions || '[]'),
+          scene_tags: Array.isArray(item.scene_tags) ? item.scene_tags : JSON.parse(item.scene_tags || '[]'),
+          season: item.season,
+          birth_month: item.birth_month,
+          birth_day: item.birth_day,
+          habitat_description: item.habitat_description,
+          source_culture: item.source_culture,
+          sentiment: item.sentiment,
+          compound_emotion: item.compound_emotion,
+          emotion_intensity: item.emotion_intensity,
+          origin: item.origin,
+          source_culture_notes: item.source_culture_notes,
+          created_at: item.flower_created_at || '',
+          photos: photos.map((p) => ({
+            ...p,
+            user_emotion_tags: Array.isArray(p.user_emotion_tags) ? p.user_emotion_tags : JSON.parse(p.user_emotion_tags || '[]'),
+          })),
+        },
+      });
+    }
 
     return NextResponse.json({ wishlist: result });
   } catch (error) {
