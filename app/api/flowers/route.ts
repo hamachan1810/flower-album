@@ -76,10 +76,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const dbUrl = process.env.DATABASE_URL || '';
-    const hostMatch = dbUrl.match(/@([^/?]+)/);
-    const dbName = dbUrl.split('/').pop()?.split('?')[0];
-    return NextResponse.json({ flowers: result, db_host: hostMatch ? hostMatch[1] : 'unknown', db_name: dbName });
+    return NextResponse.json({ flowers: result });
   } catch (error) {
     console.error('GET flowers error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
