@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { sql } from '@/lib/db';
 import { PhotoRaw } from '@/lib/types';
 
 export async function PATCH(
@@ -9,36 +9,44 @@ export async function PATCH(
   try {
     const id = parseInt(params.id);
     const body = await request.json();
-    const db = getDb();
 
-    const updates: string[] = [];
-    const values: (string | number | null)[] = [];
+    const setClauses: string[] = [];
+    const values: unknown[] = [];
+    let paramIndex = 1;
 
     if (body.shot_date !== undefined) {
-      updates.push('shot_date = ?');
+      setClauses.push(`shot_date = $${paramIndex}`);
       values.push(body.shot_date);
+      paramIndex++;
     }
     if (body.shot_location !== undefined) {
-      updates.push('shot_location = ?');
+      setClauses.push(`shot_location = $${paramIndex}`);
       values.push(body.shot_location);
+      paramIndex++;
     }
     if (body.user_memo !== undefined) {
-      updates.push('user_memo = ?');
+      setClauses.push(`user_memo = $${paramIndex}`);
       values.push(body.user_memo);
+      paramIndex++;
     }
     if (body.user_emotion_tags !== undefined) {
-      updates.push('user_emotion_tags = ?');
+      setClauses.push(`user_emotion_tags = $${paramIndex}`);
       values.push(JSON.stringify(body.user_emotion_tags));
+      paramIndex++;
     }
 
-    if (updates.length === 0) {
+    if (setClauses.length === 0) {
       return NextResponse.json({ error: 'No updates provided' }, { status: 400 });
     }
 
     values.push(id);
-    db.prepare(`UPDATE photos SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+    await sql(
+      `UPDATE photos SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`,
+      values
+    );
 
-    const photo = db.prepare('SELECT * FROM photos WHERE id = ?').get(id) as PhotoRaw;
+    const photos = await sql('SELECT * FROM photos WHERE id = $1', [id]) as unknown as PhotoRaw[];
+    const photo = photos[0];
     return NextResponse.json({
       photo: {
         ...photo,

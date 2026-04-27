@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { sql } from '@/lib/db';
 import { FlowerRaw } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -16,8 +16,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'flower_id, lat, lng are required' }, { status: 400 });
     }
 
-    const db = getDb();
-    const flower = db.prepare('SELECT * FROM flowers WHERE id = ?').get(parseInt(flowerId)) as FlowerRaw | undefined;
+    const flowers = await sql('SELECT * FROM flowers WHERE id = $1', [parseInt(flowerId)]) as unknown as FlowerRaw[];
+    const flower = flowers[0];
     if (!flower) {
       return NextResponse.json({ error: 'Flower not found' }, { status: 404 });
     }

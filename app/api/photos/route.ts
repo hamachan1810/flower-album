@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { sql } from '@/lib/db';
 import { PhotoRaw } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -9,13 +9,17 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const flowerId = searchParams.get('flower_id');
 
-    const db = getDb();
     let photos: PhotoRaw[];
 
     if (flowerId) {
-      photos = db.prepare('SELECT * FROM photos WHERE flower_id = ? ORDER BY uploaded_at DESC').all(parseInt(flowerId)) as PhotoRaw[];
+      photos = await sql(
+        'SELECT * FROM photos WHERE flower_id = $1 ORDER BY uploaded_at DESC',
+        [parseInt(flowerId)]
+      ) as unknown as PhotoRaw[];
     } else {
-      photos = db.prepare('SELECT * FROM photos ORDER BY uploaded_at DESC').all() as PhotoRaw[];
+      photos = await sql(
+        'SELECT * FROM photos ORDER BY uploaded_at DESC'
+      ) as unknown as PhotoRaw[];
     }
 
     const parsed = photos.map((p) => ({

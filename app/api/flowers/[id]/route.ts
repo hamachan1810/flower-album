@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { sql } from '@/lib/db';
 import { FlowerRaw, PhotoRaw } from '@/lib/types';
 
 export async function GET(
@@ -8,14 +8,17 @@ export async function GET(
 ) {
   try {
     const id = parseInt(params.id);
-    const db = getDb();
 
-    const flower = db.prepare('SELECT * FROM flowers WHERE id = ?').get(id) as FlowerRaw | undefined;
+    const flowers = await sql('SELECT * FROM flowers WHERE id = $1', [id]) as unknown as FlowerRaw[];
+    const flower = flowers[0];
     if (!flower) {
       return NextResponse.json({ error: 'Flower not found' }, { status: 404 });
     }
 
-    const photos = db.prepare('SELECT * FROM photos WHERE flower_id = ? ORDER BY uploaded_at DESC').all(id) as PhotoRaw[];
+    const photos = await sql(
+      'SELECT * FROM photos WHERE flower_id = $1 ORDER BY uploaded_at DESC',
+      [id]
+    ) as unknown as PhotoRaw[];
 
     return NextResponse.json({
       flower: {
@@ -42,41 +45,47 @@ export async function PATCH(
   try {
     const id = parseInt(params.id);
     const body = await request.json();
-    const db = getDb();
 
-    const updates: string[] = [];
-    const values: (string | number | null)[] = [];
+    const setClauses: string[] = [];
+    const values: unknown[] = [];
+    let paramIndex = 1;
 
     const fields = [
       'name', 'name_scientific', 'origin', 'source_culture',
       'source_culture_notes', 'birth_month', 'birth_day',
       'season', 'compound_emotion', 'emotion_intensity', 'sentiment',
-      'habitat_description'
+      'habitat_description',
     ];
 
     for (const field of fields) {
       if (body[field] !== undefined) {
-        updates.push(`${field} = ?`);
+        setClauses.push(`${field} = $${paramIndex}`);
         values.push(body[field]);
+        paramIndex++;
       }
     }
 
     const jsonFields = ['language', 'primary_emotions', 'scene_tags'];
     for (const field of jsonFields) {
       if (body[field] !== undefined) {
-        updates.push(`${field} = ?`);
+        setClauses.push(`${field} = $${paramIndex}`);
         values.push(JSON.stringify(body[field]));
+        paramIndex++;
       }
     }
 
-    if (updates.length === 0) {
+    if (setClauses.length === 0) {
       return NextResponse.json({ error: 'No updates provided' }, { status: 400 });
     }
 
     values.push(id);
-    db.prepare(`UPDATE flowers SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+    await sql(
+      `UPDATE flowers SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`,
+      values
+    );
 
-    const flower = db.prepare('SELECT * FROM flowers WHERE id = ?').get(id) as FlowerRaw;
+    const flowers = await sql('SELECT * FROM flowers WHERE id = $1', [id]) as unknown as FlowerRaw[];
+    const flower = flowers[0];
     return NextResponse.json({
       flower: {
         ...flower,

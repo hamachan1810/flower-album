@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
-import { getDb } from '@/lib/db';
+import { sql } from '@/lib/db';
 import { FlowerRaw, PhotoRaw } from '@/lib/types';
-import { writeFile } from 'fs/promises';
-import path from 'path';
+import { put } from '@vercel/blob';
+
+export const maxDuration = 60;
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -67,15 +68,23 @@ export async function POST(request: NextRequest) {
       const base64 = buffer.toString('base64');
       const mediaType = (file.type as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp') || 'image/jpeg';
 
-      // Save file
+      // Upload to Vercel Blob
       const timestamp = Date.now();
       const random = Math.random().toString(36).substring(2, 8);
       const ext = file.name.split('.').pop() || 'jpg';
-      const filename = `${timestamp}-${random}.${ext}`;
-      const uploadDir = path.join(process.cwd(), 'public', 'uploads');
-      const filePath = path.join(uploadDir, filename);
-      await writeFile(filePath, buffer);
-      const publicPath = `/uploads/${filename}`;
+      const filename = `uploads/${timestamp}-${random}.${ext}`;
+
+      let publicPath = '';
+      try {
+        const blob = await put(filename, buffer, {
+          access: 'public',
+          token: process.env.BLOB_READ_WRITE_TOKEN,
+        });
+        publicPath = blob.url;
+      } catch (err) {
+        console.error('Blob upload error:', err);
+        return NextResponse.json({ error: 'Failed to upload image' }, { status: 500 });
+      }
 
       // Analyze with Anthropic
       let analysisResult: Record<string, unknown> | null = null;
@@ -117,48 +126,54 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      const db = getDb();
-
       // Check if flower already exists
-      let flower = db.prepare('SELECT * FROM flowers WHERE name = ?').get(analysisResult.name as string) as FlowerRaw | undefined;
+      const existingFlowers = await sql(
+        'SELECT * FROM flowers WHERE name = $1',
+        [analysisResult.name as string]
+      ) as unknown as FlowerRaw[];
+      let flower = existingFlowers[0];
 
       if (!flower) {
-        const insert = db.prepare(`
-          INSERT INTO flowers (name, name_scientific, language, origin, source_culture, source_culture_notes,
+        const inserted = await sql(
+          `INSERT INTO flowers (name, name_scientific, language, origin, source_culture, source_culture_notes,
             birth_month, birth_day, season, primary_emotions, compound_emotion, emotion_intensity,
             sentiment, scene_tags, habitat_description)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
-        const info = insert.run(
-          analysisResult.name as string,
-          (analysisResult.name_scientific as string) || null,
-          JSON.stringify(analysisResult.language || []),
-          (analysisResult.origin as string) || null,
-          (analysisResult.source_culture as string) || null,
-          (analysisResult.source_culture_notes as string) || null,
-          (analysisResult.birth_month as number) || null,
-          (analysisResult.birth_day as number) || null,
-          (analysisResult.season as string) || null,
-          JSON.stringify(analysisResult.primary_emotions || []),
-          (analysisResult.compound_emotion as string) || null,
-          (analysisResult.emotion_intensity as string) || null,
-          (analysisResult.sentiment as string) || null,
-          JSON.stringify(analysisResult.scene_tags || []),
-          (analysisResult.habitat_description as string) || null
-        );
-        flower = db.prepare('SELECT * FROM flowers WHERE id = ?').get(info.lastInsertRowid) as FlowerRaw;
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+          RETURNING *`,
+          [
+            analysisResult.name as string,
+            (analysisResult.name_scientific as string) || null,
+            JSON.stringify(analysisResult.language || []),
+            (analysisResult.origin as string) || null,
+            (analysisResult.source_culture as string) || null,
+            (analysisResult.source_culture_notes as string) || null,
+            (analysisResult.birth_month as number) || null,
+            (analysisResult.birth_day as number) || null,
+            (analysisResult.season as string) || null,
+            JSON.stringify(analysisResult.primary_emotions || []),
+            (analysisResult.compound_emotion as string) || null,
+            (analysisResult.emotion_intensity as string) || null,
+            (analysisResult.sentiment as string) || null,
+            JSON.stringify(analysisResult.scene_tags || []),
+            (analysisResult.habitat_description as string) || null,
+          ]
+        ) as unknown as FlowerRaw[];
+        flower = inserted[0];
       }
 
       // Create photo record
-      const photoInsert = db.prepare(`
-        INSERT INTO photos (flower_id, file_path, is_wikimedia)
-        VALUES (?, ?, 0)
-      `);
-      const photoInfo = photoInsert.run(flower.id, publicPath);
-      const photo = db.prepare('SELECT * FROM photos WHERE id = ?').get(photoInfo.lastInsertRowid) as PhotoRaw;
+      const photoInserted = await sql(
+        `INSERT INTO photos (flower_id, file_path, is_wikimedia)
+         VALUES ($1, $2, 0) RETURNING *`,
+        [flower.id, publicPath]
+      ) as unknown as PhotoRaw[];
+      const photo = photoInserted[0];
 
       // Mark wishlist as captured if exists
-      db.prepare('UPDATE wishlist SET is_captured = 1 WHERE flower_id = ?').run(flower.id);
+      await sql(
+        'UPDATE wishlist SET is_captured = 1 WHERE flower_id = $1',
+        [flower.id]
+      );
 
       results.push({
         flower: {

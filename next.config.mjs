@@ -18,11 +18,12 @@ const nextConfig = {
         protocol: 'https',
         hostname: 'static.inaturalist.org',
       },
+      {
+        protocol: 'https',
+        hostname: '*.public.blob.vercel-storage.com',
+      },
     ],
     unoptimized: false,
-  },
-  experimental: {
-    serverComponentsExternalPackages: ['better-sqlite3'],
   },
 };
 

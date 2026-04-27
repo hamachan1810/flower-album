@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { sql } from '@/lib/db';
 
 export async function DELETE(
   _request: NextRequest,
@@ -7,14 +7,13 @@ export async function DELETE(
 ) {
   try {
     const id = parseInt(params.id);
-    const db = getDb();
 
-    const existing = db.prepare('SELECT id FROM wishlist WHERE id = ?').get(id);
-    if (!existing) {
+    const existing = await sql('SELECT id FROM wishlist WHERE id = $1', [id]);
+    if (existing.length === 0) {
       return NextResponse.json({ error: 'Wishlist item not found' }, { status: 404 });
     }
 
-    db.prepare('DELETE FROM wishlist WHERE id = ?').run(id);
+    await sql('DELETE FROM wishlist WHERE id = $1', [id]);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('DELETE wishlist error:', error);
