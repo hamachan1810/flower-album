@@ -1,4 +1,44 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 花言葉図鑑 (Flower Language Encyclopedia)
+
+A full-stack mobile-first flower album app built with Next.js 14. Upload photos, let AI (Claude) analyze flowers and their symbolic meanings, discover where flowers grow nearby via iNaturalist, and explore a birthday flower calendar.
+
+## Setup
+
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+2. Create `.env.local` and add your Anthropic API key:
+   ```
+   ANTHROPIC_API_KEY=your_anthropic_api_key_here
+   ```
+
+3. Run the development server:
+   ```bash
+   npm run dev
+   ```
+
+4. Open [http://localhost:3000](http://localhost:3000)
+
+## Features
+
+- **Album** (`/`) - Browse all flowers with search and filters (emotion, season, scene, culture, birth month)
+- **Upload** (`/upload`) - Upload flower photos; AI analyzes and records flower language, emotions, origin
+- **Wishlist** (`/wishlist`) - Track flowers you want to photograph
+- **Calendar** (`/calendar`) - Birthday flower calendar by month
+- **Flower Detail** (`/flower/[id]`) - Full info with photo swiper, editable personal records
+- **Map** (`/map/[id]`) - Find nearby observations via iNaturalist (Leaflet map)
+
+## Tech Stack
+
+- Next.js 14 App Router + TypeScript
+- Tailwind CSS
+- better-sqlite3 (local database: `flowers.db`)
+- @anthropic-ai/sdk (claude-sonnet-4-5 model)
+- Leaflet + react-leaflet (maps)
+- Wikimedia Commons API (reference images)
+- iNaturalist API (observation locations)
 
 ## Getting Started
 
