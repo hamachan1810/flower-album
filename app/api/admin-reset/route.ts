@@ -31,15 +31,14 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET() {
-  const flowers = await sql('SELECT COUNT(*) as count FROM flowers', []);
-  const photos = await sql('SELECT COUNT(*) as count FROM photos', []);
-  // DBホスト名を確認（どのDBに繋いでいるか）
+  const countResult = await sql('SELECT COUNT(*) as count FROM flowers', []);
+  const selectResult = await sql('SELECT id, name FROM flowers ORDER BY id', []);
   const dbUrl = process.env.DATABASE_URL || '';
   const hostMatch = dbUrl.match(/@([^/?]+)/);
   const dbName = dbUrl.split('/').pop()?.split('?')[0];
   return NextResponse.json({
-    flowers: flowers[0]?.count,
-    photos: photos[0]?.count,
+    count: countResult[0]?.count,
+    rows: selectResult,
     db_host: hostMatch ? hostMatch[1] : 'unknown',
     db_name: dbName,
   });
