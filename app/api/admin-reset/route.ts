@@ -37,11 +37,12 @@ export async function GET() {
   const photos = await sql('SELECT COUNT(*) as count FROM photos', []);
   // DBホスト名を確認（どのDBに繋いでいるか）
   const dbUrl = process.env.DATABASE_URL || '';
-  const hostMatch = dbUrl.match(/@([^/]+)\//);
-  const host = hostMatch ? hostMatch[1] : 'unknown';
+  const hostMatch = dbUrl.match(/@([^/?]+)/);
+  const dbName = dbUrl.split('/').pop()?.split('?')[0];
   return NextResponse.json({
     flowers: flowers[0]?.count,
     photos: photos[0]?.count,
-    db_host: host,
+    db_host: hostMatch ? hostMatch[1] : 'unknown',
+    db_name: dbName,
   });
 }
