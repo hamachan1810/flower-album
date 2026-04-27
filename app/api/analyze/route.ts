@@ -3,7 +3,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { sql } from '@/lib/db';
 import { FlowerRaw, PhotoRaw } from '@/lib/types';
 import { put } from '@vercel/blob';
-import sharp from 'sharp';
+import convert from 'heic-convert';
 
 export const maxDuration = 60;
 
@@ -80,7 +80,12 @@ export async function POST(request: NextRequest) {
       let uploadExt = originalExt;
 
       if (isHeic) {
-        const converted = await sharp(buffer).jpeg({ quality: 90 }).toBuffer();
+        const uint8 = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+        const converted = await convert({
+          buffer: uint8 as unknown as ArrayBuffer,
+          format: 'JPEG',
+          quality: 0.9,
+        });
         buffer = Buffer.from(converted) as Buffer<ArrayBuffer>;
         mediaType = 'image/jpeg';
         uploadExt = 'jpg';
