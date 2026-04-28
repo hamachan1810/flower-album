@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -39,6 +39,10 @@ export default function FlowerDetailPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [confirmTarget, setConfirmTarget] = useState<ConfirmTarget | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Photo addition
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const ownPhotos = (flower?.photos ?? []).filter((p) => p.file_path);
 
@@ -192,6 +196,33 @@ export default function FlowerDetailPage() {
         : `選択した${n}枚を削除しますか？`;
     }
     return `すべての写真（${total}枚）を削除します。削除後は参考画像が表示されます。削除しますか？`;
+  };
+
+  // ── Add photo ──
+  const handlePhotoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !flower) return;
+    e.target.value = '';
+
+    setPhotoUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('photo', file);
+      const res = await fetch(`/api/flowers/${flower.id}/photos`, {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.photo) {
+        setFlower({ ...flower, photos: [...(flower.photos ?? []), data.photo] });
+      } else {
+        alert(`写真の追加に失敗しました: ${data.error || ''}`);
+      }
+    } catch {
+      alert('写真の追加に失敗しました');
+    } finally {
+      setPhotoUploading(false);
+    }
   };
 
   const handleAddToWishlist = async () => {
@@ -394,25 +425,44 @@ export default function FlowerDetailPage() {
               ))}
             </div>
 
-            <Link
-              href="/upload"
-              className="block mt-3 py-3 border-2 border-dashed border-green-200 text-green-600 rounded-2xl text-center text-sm font-medium"
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={photoUploading}
+              className="w-full mt-3 py-3 border-2 border-dashed border-green-200 text-green-600 rounded-2xl text-center text-sm font-medium disabled:opacity-50"
             >
-              ＋ 写真を追加
-            </Link>
+              {photoUploading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="animate-spin">🌸</span>アップロード中...
+                </span>
+              ) : '＋ 写真を追加'}
+            </button>
           </div>
         )}
 
         {ownPhotos.length === 0 && (
           <div className="mt-4">
-            <Link
-              href="/upload"
-              className="block py-3 border-2 border-dashed border-green-200 text-green-600 rounded-2xl text-center text-sm font-medium"
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={photoUploading}
+              className="w-full py-3 border-2 border-dashed border-green-200 text-green-600 rounded-2xl text-center text-sm font-medium disabled:opacity-50"
             >
-              📷 この花の写真を登録する
-            </Link>
+              {photoUploading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="animate-spin">🌸</span>アップロード中...
+                </span>
+              ) : '📷 この花の写真を登録する'}
+            </button>
           </div>
         )}
+
+        {/* Hidden file input for photo upload */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,.heic,.heif"
+          className="hidden"
+          onChange={handlePhotoFileChange}
+        />
       </div>
 
       {/* ── Edit photo memo modal ── */}
