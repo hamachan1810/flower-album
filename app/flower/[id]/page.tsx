@@ -41,7 +41,7 @@ export default function FlowerDetailPage() {
   const [deleting, setDeleting] = useState(false);
 
   // Photo addition
-  const [photoUploading, setPhotoUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const ownPhotos = (flower?.photos ?? []).filter((p) => p.file_path);
@@ -198,31 +198,38 @@ export default function FlowerDetailPage() {
     return `すべての写真（${total}枚）を削除します。削除後は参考画像が表示されます。削除しますか？`;
   };
 
-  // ── Add photo ──
+  // ── Add photo(s) ──
   const handlePhotoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !flower) return;
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0 || !flower) return;
     e.target.value = '';
 
-    setPhotoUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append('photo', file);
-      const res = await fetch(`/api/flowers/${flower.id}/photos`, {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await res.json();
-      if (data.photo) {
-        setFlower({ ...flower, photos: [...(flower.photos ?? []), data.photo] });
-      } else {
-        alert(`写真の追加に失敗しました: ${data.error || ''}`);
+    setUploadProgress({ done: 0, total: files.length });
+    const newPhotos: typeof flower.photos = [];
+
+    for (const file of files) {
+      try {
+        const formData = new FormData();
+        formData.append('photo', file);
+        const res = await fetch(`/api/flowers/${flower.id}/photos`, {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await res.json();
+        if (data.photo) {
+          newPhotos.push(data.photo);
+        }
+      } catch {
+        // continue uploading remaining files on error
       }
-    } catch {
-      alert('写真の追加に失敗しました');
-    } finally {
-      setPhotoUploading(false);
+      setUploadProgress((prev) => prev ? { ...prev, done: prev.done + 1 } : null);
     }
+
+    setFlower((prev) => prev ? { ...prev, photos: [...(prev.photos ?? []), ...newPhotos] } : prev);
+    if (newPhotos.length < files.length) {
+      alert(`${files.length}枚中${files.length - newPhotos.length}枚の追加に失敗しました`);
+    }
+    setUploadProgress(null);
   };
 
   const handleAddToWishlist = async () => {
@@ -427,14 +434,15 @@ export default function FlowerDetailPage() {
 
             <button
               onClick={() => fileInputRef.current?.click()}
-              disabled={photoUploading}
+              disabled={!!uploadProgress}
               className="w-full mt-3 py-3 border-2 border-dashed border-green-200 text-green-600 rounded-2xl text-center text-sm font-medium disabled:opacity-50"
             >
-              {photoUploading ? (
+              {uploadProgress ? (
                 <span className="flex items-center justify-center gap-2">
-                  <span className="animate-spin">🌸</span>アップロード中...
+                  <span className="animate-spin">🌸</span>
+                  {uploadProgress.done}/{uploadProgress.total}枚 アップロード中...
                 </span>
-              ) : '＋ 写真を追加'}
+              ) : '＋ 写真を追加（複数選択可）'}
             </button>
           </div>
         )}
@@ -443,14 +451,15 @@ export default function FlowerDetailPage() {
           <div className="mt-4">
             <button
               onClick={() => fileInputRef.current?.click()}
-              disabled={photoUploading}
+              disabled={!!uploadProgress}
               className="w-full py-3 border-2 border-dashed border-green-200 text-green-600 rounded-2xl text-center text-sm font-medium disabled:opacity-50"
             >
-              {photoUploading ? (
+              {uploadProgress ? (
                 <span className="flex items-center justify-center gap-2">
-                  <span className="animate-spin">🌸</span>アップロード中...
+                  <span className="animate-spin">🌸</span>
+                  {uploadProgress.done}/{uploadProgress.total}枚 アップロード中...
                 </span>
-              ) : '📷 この花の写真を登録する'}
+              ) : '📷 この花の写真を登録する（複数選択可）'}
             </button>
           </div>
         )}
@@ -460,6 +469,7 @@ export default function FlowerDetailPage() {
           ref={fileInputRef}
           type="file"
           accept="image/*,.heic,.heif"
+          multiple
           className="hidden"
           onChange={handlePhotoFileChange}
         />
