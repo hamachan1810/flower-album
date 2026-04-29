@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { sql } from '@/lib/db';
 import { FlowerRaw, PhotoRaw } from '@/lib/types';
 import { put } from '@vercel/blob';
@@ -7,16 +7,12 @@ import convert from 'heic-convert';
 
 export const maxDuration = 60;
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY!);
 
-function buildPrompt(flowerName: string): string {
-  return `花の和名「${flowerName}」について、以下をJSON形式のみで返してください（前置き・説明文は不要）。
-参考として花の写真を添付します。品種の特定に活用してください。
+const PROMPT = `この写真に写っている花を特定し、以下のJSON形式のみで返してください（前置き・説明文は不要）。
 
 {
-  "name": "${flowerName}",
+  "name": "花の和名（日本語）",
   "name_scientific": "学名",
   "language": ["花言葉1", "花言葉2"],
   "origin": "花言葉の由来",
@@ -34,12 +30,10 @@ function buildPrompt(flowerName: string): string {
 }
 
 【重要ルール】
-- nameフィールドは必ず「${flowerName}」をそのまま使用すること
-- 花言葉は「${flowerName}」の正確な情報を返すこと
+- 花が特定できない場合は name を null にすること
+- 花言葉は特定した花の正確な情報を返すこと
 - 感情分類は花言葉の「文字通りの直接的な意味」で判断し、連想・象徴では判断しないこと
-- 複数の文化圏で異なる花言葉がある場合は代表的なものを主とし、差異をsource_culture_notesに記載
 - 不確かな情報は推測せず null とすること`;
-}
 
 function parseJsonSafe(text: string): Record<string, unknown> | null {
   try {
@@ -47,11 +41,7 @@ function parseJsonSafe(text: string): Record<string, unknown> | null {
   } catch {
     const match = text.match(/\{[\s\S]*\}/);
     if (match) {
-      try {
-        return JSON.parse(match[0]);
-      } catch {
-        return null;
-      }
+      try { return JSON.parse(match[0]); } catch { return null; }
     }
     return null;
   }
@@ -61,13 +51,9 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const files = formData.getAll('images') as File[];
-    const flowerName = (formData.get('flowerName') as string | null)?.trim() || '';
 
     if (!files || files.length === 0) {
       return NextResponse.json({ error: 'No images provided' }, { status: 400 });
-    }
-    if (!flowerName) {
-      return NextResponse.json({ error: 'flowerName is required' }, { status: 400 });
     }
 
     const results = [];
@@ -78,14 +64,14 @@ export async function POST(request: NextRequest) {
       const originalType = file.type.toLowerCase();
       const originalExt = (file.name.split('.').pop() || 'jpg').toLowerCase();
 
-      // Convert HEIC/HEIF to JPEG
+      // HEIC/HEIF → JPEG変換
       const isHeic =
         originalType === 'image/heic' ||
         originalType === 'image/heif' ||
         originalExt === 'heic' ||
         originalExt === 'heif';
 
-      let mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' = 'image/jpeg';
+      let mimeType: string = originalType || 'image/jpeg';
       let uploadExt = originalExt;
 
       if (isHeic) {
@@ -96,15 +82,13 @@ export async function POST(request: NextRequest) {
           quality: 0.9,
         });
         buffer = Buffer.from(converted) as Buffer<ArrayBuffer>;
-        mediaType = 'image/jpeg';
+        mimeType = 'image/jpeg';
         uploadExt = 'jpg';
-      } else {
-        mediaType = (originalType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp') || 'image/jpeg';
       }
 
       const base64 = buffer.toString('base64');
 
-      // Upload to Vercel Blob
+      // Vercel Blobにアップロード
       const timestamp = Date.now();
       const random = Math.random().toString(36).substring(2, 8);
       const filename = `uploads/${timestamp}-${random}.${uploadExt}`;
@@ -121,50 +105,35 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Failed to upload image' }, { status: 500 });
       }
 
-      // Analyze with Anthropic
+      // Gemini Visionで花を識別 + 花言葉取得
       let analysisResult: Record<string, unknown> | null = null;
       try {
-        const response = await anthropic.messages.create({
-          model: 'claude-sonnet-4-5',
-          max_tokens: 1024,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'image',
-                  source: {
-                    type: 'base64',
-                    media_type: mediaType,
-                    data: base64,
-                  },
-                },
-                {
-                  type: 'text',
-                  text: buildPrompt(flowerName),
-                },
-              ],
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+        const response = await model.generateContent([
+          { text: PROMPT },
+          {
+            inlineData: {
+              mimeType: mimeType.startsWith('image/') ? mimeType : 'image/jpeg',
+              data: base64,
             },
-          ],
-        });
-
-        const textContent = response.content.find((c) => c.type === 'text');
-        if (textContent && textContent.type === 'text') {
-          analysisResult = parseJsonSafe(textContent.text);
-        }
+          },
+        ]);
+        const text = response.response.text();
+        analysisResult = parseJsonSafe(text);
       } catch (err) {
-        console.error('Anthropic API error:', err);
+        console.error('Gemini API error:', err);
         const errMsg = err instanceof Error ? err.message : String(err);
-        results.push({ error: `Anthropic error: ${errMsg}`, file_path: publicPath });
+        results.push({ error: `Gemini error: ${errMsg}`, file_path: publicPath });
         continue;
       }
 
-      if (!analysisResult) {
-        results.push({ error: 'Failed to parse analysis result', file_path: publicPath });
+      // 花を特定できなかった場合
+      if (!analysisResult || !analysisResult.name) {
+        results.push({ error: 'flower_not_identified', file_path: publicPath });
         continue;
       }
 
-      // Check if flower already exists
+      // 同名の花が既存であれば再利用、なければ新規作成
       const existingFlowers = await sql(
         'SELECT * FROM flowers WHERE name = $1',
         [analysisResult.name as string]
@@ -179,7 +148,7 @@ export async function POST(request: NextRequest) {
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
           RETURNING *`,
           [
-            analysisResult.name as string,
+            analysisResult.name,
             (analysisResult.name_scientific as string) || null,
             JSON.stringify(analysisResult.language || []),
             (analysisResult.origin as string) || null,
@@ -199,30 +168,25 @@ export async function POST(request: NextRequest) {
         flower = inserted[0];
       }
 
-      // Create photo record
+      // 写真レコード作成
       const photoInserted = await sql(
-        `INSERT INTO photos (flower_id, file_path, is_wikimedia)
-         VALUES ($1, $2, 0) RETURNING *`,
+        `INSERT INTO photos (flower_id, file_path, is_wikimedia) VALUES ($1, $2, 0) RETURNING *`,
         [flower.id, publicPath]
       ) as unknown as PhotoRaw[];
       const photo = photoInserted[0];
 
-      // Mark wishlist as captured if exists
-      await sql(
-        'UPDATE wishlist SET is_captured = 1 WHERE flower_id = $1',
-        [flower.id]
-      );
+      await sql('UPDATE wishlist SET is_captured = 1 WHERE flower_id = $1', [flower.id]);
 
       results.push({
         flower: {
           ...flower,
-          language: JSON.parse(flower.language || '[]'),
-          primary_emotions: JSON.parse(flower.primary_emotions || '[]'),
-          scene_tags: JSON.parse(flower.scene_tags || '[]'),
+          language: Array.isArray(flower.language) ? flower.language : JSON.parse(flower.language || '[]'),
+          primary_emotions: Array.isArray(flower.primary_emotions) ? flower.primary_emotions : JSON.parse(flower.primary_emotions || '[]'),
+          scene_tags: Array.isArray(flower.scene_tags) ? flower.scene_tags : JSON.parse(flower.scene_tags || '[]'),
         },
         photo: {
           ...photo,
-          user_emotion_tags: JSON.parse(photo.user_emotion_tags || '[]'),
+          user_emotion_tags: Array.isArray(photo.user_emotion_tags) ? photo.user_emotion_tags : JSON.parse(photo.user_emotion_tags || '[]'),
         },
       });
     }

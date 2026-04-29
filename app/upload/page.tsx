@@ -14,9 +14,9 @@ interface AnalyzeResult {
 export default function UploadPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
-  const [flowerName, setFlowerName] = useState('');
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<AnalyzeResult | null>(null);
+  const [notIdentified, setNotIdentified] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -24,38 +24,37 @@ export default function UploadPage() {
     if (!file) return;
     setSelectedFile(file);
     setResult(null);
-    setFlowerName('');
-    setPrev(URL.createObjectURL(file));
-  };
-
-  const setPrev = (url: string) => {
+    setNotIdentified(false);
     if (preview) URL.revokeObjectURL(preview);
-    setPreview(url);
+    setPreview(URL.createObjectURL(file));
   };
 
   const handleReset = () => {
     if (preview) URL.revokeObjectURL(preview);
     setSelectedFile(null);
     setPreview(null);
-    setFlowerName('');
     setResult(null);
+    setNotIdentified(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleUpload = async () => {
-    if (!selectedFile || !flowerName.trim()) return;
+    if (!selectedFile) return;
     setUploading(true);
+    setNotIdentified(false);
 
     try {
       const formData = new FormData();
       formData.append('images', selectedFile);
-      formData.append('flowerName', flowerName.trim());
 
       const res = await fetch('/api/analyze', { method: 'POST', body: formData });
       const data = await res.json();
 
-      if (data.results?.[0]) {
-        setResult(data.results[0]);
+      const first = data.results?.[0];
+      if (first?.error === 'flower_not_identified') {
+        setNotIdentified(true);
+      } else if (first) {
+        setResult(first);
       } else if (data.error) {
         alert(`エラー: ${data.error}`);
       }
@@ -72,7 +71,7 @@ export default function UploadPage() {
       <div className="px-4 pt-4 pb-3 bg-white border-b border-gray-100">
         <h1 className="text-xl font-bold text-gray-900">📷 花を登録</h1>
         <p className="text-sm text-gray-500 mt-1">
-          写真と花の名前を入力して花言葉を調べます
+          写真を選ぶだけ。AIが花を自動識別して花言葉を調べます
         </p>
       </div>
 
@@ -102,52 +101,46 @@ export default function UploadPage() {
                 <div className="p-8 text-center">
                   <div className="text-4xl mb-3">🌸</div>
                   <p className="text-gray-600 font-medium">タップして写真を選択</p>
-                  <p className="text-gray-400 text-sm mt-1">1枚選んでください</p>
+                  <p className="text-gray-400 text-sm mt-1">HEIC・JPG・PNG対応</p>
                 </div>
               )}
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/*,.heic,.heif"
                 onChange={handleFileChange}
                 className="hidden"
               />
             </div>
 
-            {/* Flower name input */}
-            {selectedFile && (
-              <div>
-                <label className="text-sm font-medium text-gray-700 block mb-1">
-                  花の名前 <span className="text-red-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={flowerName}
-                  onChange={(e) => setFlowerName(e.target.value)}
-                  placeholder="例：ガザニア、バラ、タンポポ"
-                  className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-base outline-none focus:ring-2 focus:ring-green-300 focus:border-transparent"
-                  autoFocus
-                />
-                <p className="text-xs text-gray-400 mt-1">
-                  Googleレンズ等で調べた花の名前を入力してください
-                </p>
+            {/* 識別できなかった場合のメッセージ */}
+            {notIdentified && (
+              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-2xl text-sm text-yellow-800">
+                <p className="font-medium mb-1">🔍 花を特定できませんでした</p>
+                <p>別の写真で試すか、詳細ページの「✏️ 編集」から花名を手入力して登録できます。</p>
+                <button
+                  onClick={handleReset}
+                  className="mt-2 text-yellow-700 underline text-xs"
+                >
+                  別の写真を選ぶ
+                </button>
               </div>
             )}
 
             {/* Submit button */}
-            {selectedFile && (
+            {selectedFile && !notIdentified && (
               <button
                 onClick={handleUpload}
-                disabled={uploading || !flowerName.trim()}
+                disabled={uploading}
                 className="w-full py-4 bg-green-500 text-white rounded-2xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {uploading ? (
                   <span className="flex items-center justify-center gap-2">
                     <span className="animate-spin">🌸</span>
-                    花言葉を調べています...
+                    AIが花を識別中...
                   </span>
                 ) : (
-                  '花言葉を調べて登録'
+                  '🔍 AIで花を識別して登録'
                 )}
               </button>
             )}
@@ -190,6 +183,9 @@ export default function UploadPage() {
                     {result.flower.name_scientific && (
                       <p className="text-gray-400 italic text-sm">{result.flower.name_scientific}</p>
                     )}
+                    <p className="text-xs text-gray-400 mt-1">
+                      ※ 花名が違う場合は詳細ページの「✏️ 編集」で修正できます
+                    </p>
                     {result.flower.language?.length > 0 && (
                       <div className="mt-3 p-3 bg-pink-50 rounded-xl">
                         {result.flower.language.map((lang, j) => (
