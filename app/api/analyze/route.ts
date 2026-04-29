@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
       // Gemini Visionで花を識別 + 花言葉取得
       let analysisResult: Record<string, unknown> | null = null;
       try {
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
         const response = await model.generateContent([
           { text: PROMPT },
           {
