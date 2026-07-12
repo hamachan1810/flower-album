@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { sql } from '@/lib/db';
 import { FlowerRaw, PhotoRaw } from '@/lib/types';
 import { put } from '@vercel/blob';
@@ -7,9 +7,7 @@ import convert from 'heic-convert';
 
 export const maxDuration = 60;
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY!);
 
 function buildPrompt(flowerName: string): string {
   return `花の和名「${flowerName}」について、以下をJSON形式のみで返してください（前置き・説明文は不要）。
@@ -41,22 +39,6 @@ function buildPrompt(flowerName: string): string {
 - 不確かな情報は推測せず null とすること`;
 }
 
-function parseJsonSafe(text: string): Record<string, unknown> | null {
-  try {
-    return JSON.parse(text);
-  } catch {
-    const match = text.match(/\{[\s\S]*\}/);
-    if (match) {
-      try {
-        return JSON.parse(match[0]);
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  }
-}
-
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -70,6 +52,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'flowerName is required' }, { status: 400 });
     }
 
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.0-flash',
+      generationConfig: { responseMimeType: 'application/json' },
+    });
+
     const results = [];
 
     for (const file of files) {
@@ -78,14 +65,13 @@ export async function POST(request: NextRequest) {
       const originalType = file.type.toLowerCase();
       const originalExt = (file.name.split('.').pop() || 'jpg').toLowerCase();
 
-      // Convert HEIC/HEIF to JPEG
       const isHeic =
         originalType === 'image/heic' ||
         originalType === 'image/heif' ||
         originalExt === 'heic' ||
         originalExt === 'heif';
 
-      let mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' = 'image/jpeg';
+      let mimeType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' = 'image/jpeg';
       let uploadExt = originalExt;
 
       if (isHeic) {
@@ -96,10 +82,10 @@ export async function POST(request: NextRequest) {
           quality: 0.9,
         });
         buffer = Buffer.from(converted) as Buffer<ArrayBuffer>;
-        mediaType = 'image/jpeg';
+        mimeType = 'image/jpeg';
         uploadExt = 'jpg';
       } else {
-        mediaType = (originalType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp') || 'image/jpeg';
+        mimeType = (originalType as typeof mimeType) || 'image/jpeg';
       }
 
       const base64 = buffer.toString('base64');
@@ -121,41 +107,19 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Failed to upload image' }, { status: 500 });
       }
 
-      // Analyze with Anthropic
+      // Analyze with Gemini
       let analysisResult: Record<string, unknown> | null = null;
       try {
-        const response = await anthropic.messages.create({
-          model: 'claude-sonnet-4-5',
-          max_tokens: 1024,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'image',
-                  source: {
-                    type: 'base64',
-                    media_type: mediaType,
-                    data: base64,
-                  },
-                },
-                {
-                  type: 'text',
-                  text: buildPrompt(flowerName),
-                },
-              ],
-            },
-          ],
-        });
-
-        const textContent = response.content.find((c) => c.type === 'text');
-        if (textContent && textContent.type === 'text') {
-          analysisResult = parseJsonSafe(textContent.text);
-        }
+        const response = await model.generateContent([
+          { inlineData: { data: base64, mimeType } },
+          buildPrompt(flowerName),
+        ]);
+        const text = response.response.text();
+        analysisResult = JSON.parse(text);
       } catch (err) {
-        console.error('Anthropic API error:', err);
+        console.error('Gemini API error:', err);
         const errMsg = err instanceof Error ? err.message : String(err);
-        results.push({ error: `Anthropic error: ${errMsg}`, file_path: publicPath });
+        results.push({ error: `Gemini error: ${errMsg}`, file_path: publicPath });
         continue;
       }
 

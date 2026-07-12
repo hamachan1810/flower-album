@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { sql } from '@/lib/db';
 import { FlowerRaw } from '@/lib/types';
 
 export const maxDuration = 60;
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY!);
 
 function buildPrompt(flowerName: string): string {
   return `花の和名「${flowerName}」について、以下をJSON形式のみで返してください（前置き・説明文は不要）。
@@ -36,18 +36,6 @@ function buildPrompt(flowerName: string): string {
 - 不確かな情報は推測せず null とすること`;
 }
 
-function parseJsonSafe(text: string): Record<string, unknown> | null {
-  try {
-    return JSON.parse(text);
-  } catch {
-    const match = text.match(/\{[\s\S]*\}/);
-    if (match) {
-      try { return JSON.parse(match[0]); } catch { return null; }
-    }
-    return null;
-  }
-}
-
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -62,23 +50,18 @@ export async function POST(
 
     const flowerName = name.trim();
 
-    // Call Claude to get flower language data by name
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5',
-      max_tokens: 1024,
-      messages: [{
-        role: 'user',
-        content: [{ type: 'text', text: buildPrompt(flowerName) }],
-      }],
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.0-flash',
+      generationConfig: { responseMimeType: 'application/json' },
     });
 
-    const textContent = response.content.find((c) => c.type === 'text');
-    if (!textContent || textContent.type !== 'text') {
-      return NextResponse.json({ error: 'No response from AI' }, { status: 500 });
-    }
+    const response = await model.generateContent(buildPrompt(flowerName));
+    const text = response.response.text();
 
-    const result = parseJsonSafe(textContent.text);
-    if (!result) {
+    let result: Record<string, unknown>;
+    try {
+      result = JSON.parse(text);
+    } catch {
       return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 });
     }
 
