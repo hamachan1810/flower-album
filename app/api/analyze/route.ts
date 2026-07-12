@@ -9,12 +9,11 @@ export const maxDuration = 60;
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY!);
 
-function buildPrompt(flowerName: string): string {
-  return `花の和名「${flowerName}」について、以下をJSON形式のみで返してください（前置き・説明文は不要）。
-参考として花の写真を添付します。品種の特定に活用してください。
+function buildPrompt(): string {
+  return `添付された花の写真を見て、花の種類を特定し、以下をJSON形式のみで返してください（前置き・説明文は不要）。
 
 {
-  "name": "${flowerName}",
+  "name": "花の和名",
   "name_scientific": "学名",
   "language": ["花言葉1", "花言葉2"],
   "origin": "花言葉の由来",
@@ -32,8 +31,9 @@ function buildPrompt(flowerName: string): string {
 }
 
 【重要ルール】
-- nameフィールドは必ず「${flowerName}」をそのまま使用すること
-- 花言葉は「${flowerName}」の正確な情報を返すこと
+- nameフィールドは写真から特定した花の正確な和名を入れること
+- 花が特定できない場合は name を「不明な花」とし他フィールドは null にすること
+- 花言葉はその花の正確な情報を返すこと
 - 感情分類は花言葉の「文字通りの直接的な意味」で判断し、連想・象徴では判断しないこと
 - 複数の文化圏で異なる花言葉がある場合は代表的なものを主とし、差異をsource_culture_notesに記載
 - 不確かな情報は推測せず null とすること`;
@@ -43,13 +43,9 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const files = formData.getAll('images') as File[];
-    const flowerName = (formData.get('flowerName') as string | null)?.trim() || '';
 
     if (!files || files.length === 0) {
       return NextResponse.json({ error: 'No images provided' }, { status: 400 });
-    }
-    if (!flowerName) {
-      return NextResponse.json({ error: 'flowerName is required' }, { status: 400 });
     }
 
     const model = genAI.getGenerativeModel({
@@ -112,7 +108,7 @@ export async function POST(request: NextRequest) {
       try {
         const response = await model.generateContent([
           { inlineData: { data: base64, mimeType } },
-          buildPrompt(flowerName),
+          buildPrompt(),
         ]);
         const text = response.response.text();
         analysisResult = JSON.parse(text);

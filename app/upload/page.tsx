@@ -14,7 +14,6 @@ interface AnalyzeResult {
 export default function UploadPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
-  const [flowerName, setFlowerName] = useState('');
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<AnalyzeResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -24,7 +23,6 @@ export default function UploadPage() {
     if (!file) return;
     setSelectedFile(file);
     setResult(null);
-    setFlowerName('');
     setPrev(URL.createObjectURL(file));
   };
 
@@ -37,19 +35,17 @@ export default function UploadPage() {
     if (preview) URL.revokeObjectURL(preview);
     setSelectedFile(null);
     setPreview(null);
-    setFlowerName('');
     setResult(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleUpload = async () => {
-    if (!selectedFile || !flowerName.trim()) return;
+    if (!selectedFile) return;
     setUploading(true);
 
     try {
       const formData = new FormData();
       formData.append('images', selectedFile);
-      formData.append('flowerName', flowerName.trim());
 
       const res = await fetch('/api/analyze', { method: 'POST', body: formData });
       const data = await res.json();
@@ -72,7 +68,7 @@ export default function UploadPage() {
       <div className="px-4 pt-4 pb-3 bg-white border-b border-gray-100">
         <h1 className="text-xl font-bold text-gray-900">📷 花を登録</h1>
         <p className="text-sm text-gray-500 mt-1">
-          写真と花の名前を入力して花言葉を調べます
+          写真を撮るだけ — AIが花の名前と花言葉を自動で調べます
         </p>
       </div>
 
@@ -114,31 +110,11 @@ export default function UploadPage() {
               />
             </div>
 
-            {/* Flower name input */}
-            {selectedFile && (
-              <div>
-                <label className="text-sm font-medium text-gray-700 block mb-1">
-                  花の名前 <span className="text-red-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={flowerName}
-                  onChange={(e) => setFlowerName(e.target.value)}
-                  placeholder="例：ガザニア、バラ、タンポポ"
-                  className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-base outline-none focus:ring-2 focus:ring-green-300 focus:border-transparent"
-                  autoFocus
-                />
-                <p className="text-xs text-gray-400 mt-1">
-                  Googleレンズ等で調べた花の名前を入力してください
-                </p>
-              </div>
-            )}
-
             {/* Submit button */}
             {selectedFile && (
               <button
                 onClick={handleUpload}
-                disabled={uploading || !flowerName.trim()}
+                disabled={uploading}
                 className="w-full py-4 bg-green-500 text-white rounded-2xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {uploading ? (
